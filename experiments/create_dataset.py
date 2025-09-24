@@ -20,57 +20,120 @@ from sf_logging import get_logger
 
 logger = get_logger(__name__)
 
-def get_exact_token_count(text: str, tokenizer) -> int:
-    """Get exact token count using the model's tokenizer."""
-    return len(tokenizer.encode(text))
+def get_token_counts(texts: List[str], tokenizer, batch_size: int = 64) -> List[int]:
+    """Get exact token counts using GPU batch tokenization."""
+    if not torch.cuda.is_available():
+        logger.info(f"No GPU available, using CPU tokenization...")
+        return [len(tokenizer.encode(text, add_special_tokens=False)) for text in tqdm(texts, desc="CPU tokenizing")]
+    
+    logger.info(f"GPU tokenizing {len(texts)} conversations...")
+    token_counts = []
+    
+    # Process in batches with proper padding for GPU
+    for i in tqdm(range(0, len(texts), batch_size), desc="GPU tokenizing"):
+        batch_texts = texts[i:i + batch_size]
+        
+        # Batch tokenize with padding (required for GPU tensors)
+        encoded = tokenizer(
+            batch_texts,
+            padding=True,
+            truncation=False,
+            return_tensors="pt",
+            add_special_tokens=False
+        ).to("cuda")
+        
+        # Count actual tokens (excluding padding)
+        for input_ids, attention_mask in zip(encoded["input_ids"], encoded["attention_mask"]):
+            # Count non-padding tokens
+            actual_length = attention_mask.sum().item()
+            token_counts.append(actual_length)
+            
+    return token_counts
 
-def convert_to_conversations(data: List[Dict[str, Any]], max_length_filter: int = None, tokenizer=None) -> List[Dict[str, Any]]:
-    """Convert messages format to SpecForge conversations format."""
+def extract_conversations_from_messages(example: Dict[str, Any], index: int) -> List[Dict[str, str]]:
+    """Extract conversations from messages format."""
+    if "messages" not in example:
+        raise ValueError(f"Sample {index}: Missing 'messages' field")
+        
+    conversations = []
+    for j, message in enumerate(example["messages"]):
+        if "role" not in message:
+            raise ValueError(f"Sample {index}, message {j}: Missing 'role' field")
+        if "content" not in message:
+            raise ValueError(f"Sample {index}, message {j}: Missing 'content' field")
+            
+        role = message["role"]
+        content = message["content"]
+        
+        # Keep system, user, and assistant messages
+        if role in ["system", "user", "assistant"]:
+            conversations.append({"role": role, "content": content})
+    
+    # Must have at least user and assistant (system is optional)
+    user_count = sum(1 for turn in conversations if turn["role"] == "user")
+    assistant_count = sum(1 for turn in conversations if turn["role"] == "assistant")
+    
+    if user_count == 0:
+        raise ValueError(f"Sample {index}: No user messages found")
+    if assistant_count == 0:
+        raise ValueError(f"Sample {index}: No assistant messages found")
+    
+    return conversations
+
+def filter_by_token_length(conversations: List[Dict[str, Any]], max_length_filter: int, tokenizer) -> List[Dict[str, Any]]:
+    """Filter conversations by token length using GPU batch processing."""
+    if not max_length_filter:
+        raise ValueError("max_length_filter must be provided for filtering")
+    if not tokenizer:
+        raise ValueError("tokenizer must be provided for filtering")
+    if not conversations:
+        raise ValueError("conversations list cannot be empty")
+    
+    # Extract texts for batch tokenization
+    conversation_texts = []
+    for conv in conversations:
+        total_content = " ".join([turn["content"] for turn in conv["conversations"]])
+        conversation_texts.append(total_content)
+    
+    token_counts = get_token_counts(conversation_texts, tokenizer)
+    
+    # Filter based on token counts
     converted = []
     filtered_count = 0
     
-    # Progress bar description
-    desc = "Converting conversations"
-    if max_length_filter and tokenizer:
-        desc += f" (filtering >{max_length_filter} tokens)"
+    for conv, token_count in zip(conversations, token_counts):
+        if token_count <= max_length_filter:
+            converted.append(conv)
+        else:
+            filtered_count += 1
     
-    for i, example in enumerate(tqdm(data, desc=desc)):
-        if "messages" not in example:
-            raise ValueError(f"Sample {i}: Missing 'messages' field")
-            
-        conversations = []
-        for j, message in enumerate(example["messages"]):
-            if "role" not in message:
-                raise ValueError(f"Sample {i}, message {j}: Missing 'role' field")
-            if "content" not in message:
-                raise ValueError(f"Sample {i}, message {j}: Missing 'content' field")
-                
-            role = message["role"]
-            content = message["content"]
-            
-            if role in ["user", "assistant"]:
-                conversations.append({"role": role, "content": content})
+    if filtered_count > 0:
+        logger.info(f"Filtered out {filtered_count} conversations longer than {max_length_filter} tokens")
         
-        if len(conversations) >= 2:
-            # Filter by length if specified
-            if max_length_filter and tokenizer:
-                total_content = " ".join([turn["content"] for turn in conversations])
-                exact_tokens = get_exact_token_count(total_content, tokenizer)
-                
-                if exact_tokens > max_length_filter:
-                    filtered_count += 1
-                    continue  # Skip this conversation
-            
-            converted.append({
+    return converted
+
+def convert_to_conversations(data: List[Dict[str, Any]], max_length_filter: int = None, tokenizer=None) -> List[Dict[str, Any]]:
+    """Convert messages format to SpecForge conversations format."""
+    
+    # First pass: Convert all messages to conversations
+    all_conversations = []
+    
+    for i, example in enumerate(tqdm(data, desc="Processing messages")):
+        try:
+            conversations = extract_conversations_from_messages(example, i)
+            all_conversations.append({
                 "id": f"sample_{i}",
                 "conversations": conversations
             })
+        except ValueError as e:
+            logger.error(f"Skipping sample {i}: {e}")
+            continue
     
-    # Show filtering results
-    if max_length_filter and tokenizer and filtered_count > 0:
-        logger.info(f"Filtered out {filtered_count} conversations longer than {max_length_filter} tokens")
-    
-    return converted
+    # Second pass: Filter by token length if requested
+    if max_length_filter and tokenizer:
+        return filter_by_token_length(all_conversations, max_length_filter, tokenizer)
+    else:
+        return all_conversations
 
 def create_dataset(args):
     """Create dataset for SpecForge training."""
