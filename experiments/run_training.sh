@@ -27,8 +27,10 @@ EMBEDDING_KEY="model.embed_tokens.weight"
 ATTENTION_BACKEND="flex_attention"
 TTT_LENGTH=7
 LOG_STEPS=1
-SAVE_INTERVAL=100
-EVAL_INTERVAL=20
+SAVE_INTERVAL=1   # Save after each epoch (if step-based not used)
+EVAL_INTERVAL=1   # Eval after each epoch (if step-based not used)
+EVAL_STEPS=500    # Run evaluation every 500 steps
+SAVE_STEPS=1000   # Save checkpoint every 1000 steps
 REPORT_TO="wandb"
 WANDB_PROJECT="spec-forge-training"
 WANDB_NAME="amp-tab-eagle3-poc"
@@ -87,6 +89,8 @@ python "$SCRIPT_DIR/run_eagle3_training.py" \
     --report-to "$REPORT_TO" \
     --wandb-project "$WANDB_PROJECT" \
     --wandb-name "$WANDB_NAME" \
+    --eval-steps "$EVAL_STEPS" \
+    --save-steps "$SAVE_STEPS" \
     $([ -n "$NUM_GPUS" ] && echo "--num-gpus $NUM_GPUS")
 
 echo "✅ Training script completed!"

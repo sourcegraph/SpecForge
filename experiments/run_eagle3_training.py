@@ -159,6 +159,12 @@ def run_training(args):
         "--wandb-name", f"{args.wandb_name}-{datetime.now().strftime('%Y%m%d_%H%M%S')}"  # Add timestamp to wandb name
     ]
     
+    # Add step-based parameters if provided
+    if args.eval_steps:
+        cmd.extend(["--eval-steps", str(args.eval_steps)])
+    if args.save_steps:
+        cmd.extend(["--save-steps", str(args.save_steps)])
+    
     # Run training
     logger.info("Launching training process...")
     logger.info(f"Command: {' '.join(cmd[:3])} [training script with {len(cmd)-3} arguments]")
@@ -223,6 +229,10 @@ def main():
                        help="Weights & Biases project name")
     parser.add_argument("--wandb-name", type=str, required=True,
                        help="Weights & Biases run name")
+    parser.add_argument("--eval-steps", type=int,
+                       help="Run evaluation every N steps (overrides epoch-based eval)")
+    parser.add_argument("--save-steps", type=int,
+                       help="Save checkpoint every N steps (overrides epoch-based saving)")
     
     args = parser.parse_args()
     run_training(args)

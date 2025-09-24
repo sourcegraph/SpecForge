@@ -115,6 +115,18 @@ def parse_args():
     parser.add_argument("--output-dir", type=str, required=True)
     parser.add_argument("--eval-interval", type=int, default=1)
     parser.add_argument("--save-interval", type=int, default=1)
+    parser.add_argument(
+        "--eval-steps",
+        type=int,
+        default=None,
+        help="Run evaluation every N optimizer steps. If set, overrides epoch-based eval.",
+    )
+    parser.add_argument(
+        "--save-steps",
+        type=int,
+        default=None,
+        help="Save a checkpoint every N optimizer steps. If set, overrides epoch-based saving.",
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--dist-timeout",
@@ -542,6 +554,106 @@ def main():
                     tracker.log(log_dict, step=global_step)
                 log_dict = defaultdict(float)
 
+                # Step-based evaluation (if enabled)
+                if (
+                    args.eval_data_path is not None
+                    and args.eval_steps is not None
+                    and args.eval_steps > 0
+                    and (global_step % args.eval_steps == 0)
+                ):
+                    draft_model.eval()
+                    eval_acces = [[] for _ in range(eagle3_model.length)]
+                    eval_plosses = [[] for _ in range(eagle3_model.length)]
+
+                    if dist.get_rank() == 0:
+                        eval_iter = tqdm(eval_dataloader, desc=f"Evaluating Step {global_step}")
+                    else:
+                        eval_iter = eval_dataloader
+
+                    for data in eval_iter:
+                        if args.is_vlm:
+                            with torch.no_grad():
+                                plosses, _, acces = eagle3_model(
+                                    input_ids=data["input_ids"].cuda(),
+                                    attention_mask=data["attention_mask"].cuda(),
+                                    loss_mask=data["loss_mask"].cuda(),
+                                    pixel_values=data["pixel_values"].cuda(),
+                                    image_grid_thw=data["image_grid_thw"].cuda(),
+                                )
+                        else:
+                            with torch.no_grad():
+                                plosses, _, acces = eagle3_model(
+                                    input_ids=data["input_ids"].cuda(),
+                                    attention_mask=data["attention_mask"].cuda(),
+                                    loss_mask=data["loss_mask"].cuda(),
+                                )
+                        acces = torch.stack(acces).cpu().tolist()
+
+                        eval_acces = [eval_acces[i] + [acces[i]] for i in range(len(acces))]
+                        eval_plosses = [
+                            eval_plosses[i] + [plosses[i].item()] for i in range(len(plosses))
+                        ]
+
+                    # Log step-level eval metrics
+                    eval_logdict = {}
+                    for i in range(len(eval_acces)):
+                        acc_i = torch.tensor(eval_acces[i]).cuda().mean()
+                        dist.all_reduce(acc_i)
+                        acc_i = (acc_i / dist.get_world_size()).item()
+                        eval_logdict[f"eval/step_acc_{i}"] = acc_i
+                        print_on_rank0(
+                            f"Eval Step [{global_step}], position {i}, Acc: {acc_i:.2f}"
+                        )
+
+                    for i in range(len(eval_plosses)):
+                        loss_i = torch.tensor(eval_plosses[i]).cuda().mean()
+                        dist.all_reduce(loss_i)
+                        loss_i = (loss_i / dist.get_world_size()).item()
+                        eval_logdict[f"eval/step_ploss_{i}"] = loss_i
+                        print_on_rank0(
+                            f"Eval Step [{global_step}], position {i}, pLoss: {loss_i:.2f}"
+                        )
+
+                    tracker.log(eval_logdict, step=global_step)
+                    draft_model.train()
+
+                # Step-based saving (if enabled)
+                if args.save_steps is not None and args.save_steps > 0 and (global_step % args.save_steps == 0):
+                    step_output_dir = os.path.join(args.output_dir, f"step_{global_step}")
+
+                    if dist.get_rank() == 0:
+                        os.makedirs(step_output_dir, exist_ok=True)
+                    dist.barrier()
+
+                    with FSDP.state_dict_type(eagle3_model, StateDictType.FULL_STATE_DICT):
+                        model_state_dict = eagle3_model.state_dict()
+                        state_to_save = {
+                            "epoch": epoch,
+                            "global_step": global_step,
+                            "args": args,
+                        }
+                        state_to_save.update(optimizer.state_dict())
+                        draft_model_state_dict = {
+                            k.replace("draft_model.", ""): v
+                            for k, v in model_state_dict.items()
+                            if "draft_model." in k and "embed" not in k.lower()
+                        }
+
+                        if dist.get_rank() == 0:
+                            torch.save(
+                                state_to_save,
+                                os.path.join(step_output_dir, "training_state.pt"),
+                            )
+                            print_on_rank0(
+                                f"Saved full training state to {step_output_dir}/training_state.pt"
+                            )
+                            draft_model.save_pretrained(
+                                step_output_dir,
+                                state_dict=draft_model_state_dict,
+                            )
+                            print_on_rank0(f"Saved model configuration to {step_output_dir}")
+                        dist.barrier()
+
             epoch_acces = [epoch_acces[i] + [acces[i]] for i in range(len(acces))]
             epoch_plosses = [
                 epoch_plosses[i] + [plosses[i].item()] for i in range(len(plosses))
@@ -580,8 +692,12 @@ def main():
             )
         tracker.log(epoch_logdict, step=global_step)
 
-        # run evaluation
-        if args.eval_data_path is not None and epoch % args.eval_interval == 0:
+        # run evaluation (only if step-based eval is not enabled)
+        if (
+            args.eval_data_path is not None
+            and args.eval_steps is None
+            and epoch % args.eval_interval == 0
+        ):
             # Run evaluation
             draft_model.eval()
             eval_acces = [[] for _ in range(eagle3_model.length)]
@@ -632,7 +748,8 @@ def main():
                 )
             tracker.log(eval_logdict, step=global_step)
 
-        if epoch % args.save_interval == 0:
+        # save checkpoint (only if step-based saving is not enabled)
+        if args.save_steps is None and epoch % args.save_interval == 0:
             # Save the model
             epoch_output_dir = os.path.join(args.output_dir, f"epoch_{epoch}")
 
