@@ -5,8 +5,8 @@ set -e
 
 # Configuration  
 BASE_DATASET="/home/ronaksagtani/artifacts/spec-forge/dataset/data.jsonl"
-NUM_SAMPLES=${1:-1000}   # None means use all samples
-EVAL_SAMPLES=${2:-100}   # Default 500 eval samples
+NUM_SAMPLES=${1:-100}   # None means use all samples
+EVAL_SAMPLES=${2:-10}   # Default 500 eval samples
 OUTPUT_DIR="/home/ronaksagtani/artifacts/spec-forge/prepared_data"
 MODEL_PATH="sourcegraph/amp-tab-v3-all-comb-no-pred-neg-0p20p-rel-qwen-chat-pred-3k"
 

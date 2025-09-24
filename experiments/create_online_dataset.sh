@@ -5,8 +5,8 @@ set -e
 
 # Configuration  
 BASE_DATASET="/home/ronaksagtani/artifacts/spec-forge/dataset/data.jsonl"
-NUM_SAMPLES=${1:-None}   # None means use all samples
-EVAL_SAMPLES=${2:-500}   # Default 500 eval samples
+NUM_SAMPLES=${1:-1000}   # None means use all samples
+EVAL_SAMPLES=${2:-100}   # Default 500 eval samples
 OUTPUT_DIR="/home/ronaksagtani/artifacts/spec-forge/prepared_data"
 MAX_LENGTH_FILTER=9000                # Filter out conversations longer than this
 TOKENIZER_MODEL="sourcegraph/amp-tab-v3-all-comb-no-pred-neg-0p20p-rel-qwen-chat-pred-3k"  # Model for tokenizer

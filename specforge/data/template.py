@@ -35,7 +35,7 @@ class TemplateRegistry:
             template=ChatTemplate(
                 assistant_header="<|start_header_id|>assistant<|end_header_id|>\n\n",
                 user_header="<|start_header_id|>user<|end_header_id|>",
-                system_prompt="You are a helpful assistant.",
+                system_prompt="You are an intelligent programmer and an expert at coding. Your goal is to help a colleague finish a code change.",
                 end_of_turn_token="<|eot_id|>"
             )
         )
@@ -100,7 +100,7 @@ TEMPLATE_REGISTRY.register(
     template=ChatTemplate(
         assistant_header="<|header_start|>assistant<|header_end|>\n\n",
         user_header="<|header_start|>user<|header_end|>",
-        system_prompt="You are a helpful assistant.",
+        system_prompt="You are an intelligent programmer and an expert at coding. Your goal is to help a colleague finish a code change.",
         end_of_turn_token="<|eot|>",
     ),
 )
@@ -110,7 +110,7 @@ TEMPLATE_REGISTRY.register(
     template=ChatTemplate(
         assistant_header="<|im_start|>assistant\n",
         user_header="<|im_start|>user\n",
-        system_prompt="You are a helpful assistant.",
+        system_prompt="You are an intelligent programmer and an expert at coding. Your goal is to help a colleague finish a code change.",
         end_of_turn_token="<|im_end|>\n",
     ),
 )
@@ -120,7 +120,7 @@ TEMPLATE_REGISTRY.register(
     template=ChatTemplate(
         assistant_header="<|im_start|>assistant\n",
         user_header="<|im_start|>user\n",
-        system_prompt="You are a helpful assistant.",
+        system_prompt="You are an intelligent programmer and an expert at coding. Your goal is to help a colleague finish a code change.",
         end_of_turn_token="<|im_end|>\n",
     ),
 )
@@ -130,7 +130,7 @@ TEMPLATE_REGISTRY.register(
     template=ChatTemplate(
         assistant_header="Assistant:",
         user_header="User:",
-        system_prompt="You are a helpful assistant.",
+        system_prompt="You are an intelligent programmer and an expert at coding. Your goal is to help a colleague finish a code change.",
         end_of_turn_token="",
     ),
 )
@@ -140,7 +140,7 @@ TEMPLATE_REGISTRY.register(
     template=ChatTemplate(
         assistant_header="<|assistant|>\n",
         user_header="<|user|>\n",
-        system_prompt="You are a helpful assistant.",
+        system_prompt="You are an intelligent programmer and an expert at coding. Your goal is to help a colleague finish a code change.",
         end_of_turn_token="<|end|>\n",
     ),
 )
@@ -150,7 +150,7 @@ TEMPLATE_REGISTRY.register(
     template=ChatTemplate(
         assistant_header="<|im_start|>assistant<|im_sep|>",
         user_header="<|im_start|>user<|im_sep|>",
-        system_prompt="You are a helpful assistant.",
+        system_prompt="You are an intelligent programmer and an expert at coding. Your goal is to help a colleague finish a code change.",
         end_of_turn_token="<|im_end|>",
     ),
 )
@@ -160,7 +160,7 @@ TEMPLATE_REGISTRY.register(
     template=ChatTemplate(
         assistant_header="<|assistant|>",
         user_header="<|user|>",
-        system_prompt="You are a helpful assistant.",
+        system_prompt="You are an intelligent programmer and an expert at coding. Your goal is to help a colleague finish a code change.",
         end_of_turn_token="<|end|>",
     ),
 )

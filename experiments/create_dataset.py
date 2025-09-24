@@ -8,9 +8,17 @@ import json
 import argparse
 import subprocess
 import torch
+import sys
 from pathlib import Path
 from typing import Dict, Any, List
 from transformers import AutoTokenizer
+from tqdm import tqdm
+
+# Add experiments directory to path for logging import
+sys.path.insert(0, str(Path(__file__).parent))
+from sf_logging import get_logger
+
+logger = get_logger(__name__)
 
 def get_exact_token_count(text: str, tokenizer) -> int:
     """Get exact token count using the model's tokenizer."""
@@ -19,8 +27,14 @@ def get_exact_token_count(text: str, tokenizer) -> int:
 def convert_to_conversations(data: List[Dict[str, Any]], max_length_filter: int = None, tokenizer=None) -> List[Dict[str, Any]]:
     """Convert messages format to SpecForge conversations format."""
     converted = []
+    filtered_count = 0
     
-    for i, example in enumerate(data):
+    # Progress bar description
+    desc = "Converting conversations"
+    if max_length_filter and tokenizer:
+        desc += f" (filtering >{max_length_filter} tokens)"
+    
+    for i, example in enumerate(tqdm(data, desc=desc)):
         if "messages" not in example:
             raise ValueError(f"Sample {i}: Missing 'messages' field")
             
@@ -44,12 +58,17 @@ def convert_to_conversations(data: List[Dict[str, Any]], max_length_filter: int 
                 exact_tokens = get_exact_token_count(total_content, tokenizer)
                 
                 if exact_tokens > max_length_filter:
+                    filtered_count += 1
                     continue  # Skip this conversation
             
             converted.append({
                 "id": f"sample_{i}",
                 "conversations": conversations
             })
+    
+    # Show filtering results
+    if max_length_filter and tokenizer and filtered_count > 0:
+        logger.info(f"Filtered out {filtered_count} conversations longer than {max_length_filter} tokens")
     
     return converted
 
@@ -61,25 +80,25 @@ def create_dataset(args):
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    print(f"📂 Base dataset: {base_path}")
-    print(f"📁 Output: {output_dir}")
-    print(f"🎯 Mode: {args.mode}")
-    print(f"📊 Samples: {args.num_samples}")
-    print(f"🔍 Eval samples: {args.eval_samples}")
+    logger.info(f"Base dataset: {base_path}")
+    logger.info(f"Output directory: {output_dir}")
+    logger.info(f"Mode: {args.mode}")
+    logger.info(f"Samples: {args.num_samples}")
+    logger.info(f"Eval samples: {args.eval_samples}")
     
     # Load tokenizer if filtering is requested
     tokenizer = None
     if args.max_length_filter and args.tokenizer_model:
-        print(f"🔧 Loading tokenizer from {args.tokenizer_model} for exact token counting...")
+        logger.info(f"Loading tokenizer from {args.tokenizer_model} for exact token counting...")
         try:
             tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_model)
-            print(f"✅ Tokenizer loaded successfully")
+            logger.info("Tokenizer loaded successfully")
         except Exception as e:
-            print(f"⚠️ Failed to load tokenizer: {e}")
-            print("Skipping length filtering...")
+            logger.warning(f"Failed to load tokenizer: {e}")
+            logger.warning("Skipping length filtering...")
     
     # Load and convert data
-    print("\n⚙️  Loading and converting data...")
+    logger.info("Loading and converting data...")
     data = []
     with open(base_path, 'r', encoding='utf-8') as f:
         for i, line in enumerate(f):
@@ -92,14 +111,14 @@ def create_dataset(args):
                 continue
     
     converted_data = convert_to_conversations(data, args.max_length_filter, tokenizer)
-    print(f"✅ Converted {len(converted_data)} conversations")
+    logger.info(f"Converted {len(converted_data)} conversations")
     
     # Split data
     eval_size = args.eval_samples
     train_size = len(converted_data) - eval_size
     
     if eval_size >= len(converted_data):
-        print("❌ Error: eval_samples >= total converted samples")
+        logger.error("eval_samples >= total converted samples")
         return
     
     train_data = converted_data[:train_size]
@@ -117,8 +136,8 @@ def create_dataset(args):
         for example in eval_data:
             f.write(json.dumps(example, ensure_ascii=False) + '\n')
     
-    print(f"✅ Created train: {train_file} ({len(train_data)} samples)")
-    print(f"✅ Created eval: {eval_file} ({len(eval_data)} samples)")
+    logger.info(f"Created train: {train_file} ({len(train_data)} samples)")
+    logger.info(f"Created eval: {eval_file} ({len(eval_data)} samples)")
     
     # Generate hidden states for offline mode
     if args.mode == "offline":
@@ -133,10 +152,10 @@ def create_dataset(args):
         
         for param, name in offline_params:
             if not getattr(args, param):
-                print(f"❌ Error: --{param.replace('_', '-')} is required for offline mode")
+                logger.error(f"--{param.replace('_', '-')} is required for offline mode")
                 return
                 
-        print(f"\n⚙️  Generating hidden states for offline training...")
+        logger.info("Generating hidden states for offline training...")
         generate_hidden_states(
             args.model_path, 
             train_file, 
@@ -147,7 +166,7 @@ def create_dataset(args):
             args.mem_frac
         )
     
-    print(f"\n🎉 Dataset ready for {args.mode} training!")
+    logger.info(f"Dataset ready for {args.mode} training!")
 
 def generate_hidden_states(
     model_path: str, 
@@ -175,10 +194,10 @@ def generate_hidden_states(
     prepare_script = root_dir / "scripts" / "prepare_hidden_states.py"
     
     if not prepare_script.exists():
-        print(f"❌ Error: {prepare_script} not found")
+        logger.error(f"{prepare_script} not found")
         return
     
-    print(f"🔧 Using {tp_size} GPU(s) for hidden states generation")
+    logger.info(f"Using {tp_size} GPU(s) for hidden states generation")
     
     cmd = [
         "torchrun", "--standalone", f"--nproc_per_node={tp_size}",
@@ -197,9 +216,9 @@ def generate_hidden_states(
     result = subprocess.run(cmd, capture_output=False)
     
     if result.returncode == 0:
-        print(f"✅ Hidden states saved to: {output_path}")
+        logger.info(f"Hidden states saved to: {output_path}")
     else:
-        print(f"❌ Failed to generate hidden states")
+        logger.error("Failed to generate hidden states")
 
 def main():
     parser = argparse.ArgumentParser(
