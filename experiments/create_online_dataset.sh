@@ -8,8 +8,6 @@ BASE_DATASET="/home/ronaksagtani/artifacts/spec-forge/dataset/data.jsonl"
 NUM_SAMPLES=${1:-None}   # None means use all samples
 EVAL_SAMPLES=${2:-1000}   # Default 1000 eval samples
 OUTPUT_DIR="/home/ronaksagtani/artifacts/spec-forge/prepared_data"
-MAX_LENGTH_FILTER=8192                # Filter out conversations longer than this
-TOKENIZER_MODEL="sourcegraph/amp-tab-v3-all-comb-no-pred-neg-0p20p-rel-qwen-chat-pred-3k"  # Model for tokenizer
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
@@ -27,8 +25,6 @@ python "$SCRIPT_DIR/create_dataset.py" \
     --base-dataset "$BASE_DATASET" \
     --output-dir "$OUTPUT_DIR" \
     --num-samples "$NUM_SAMPLES" \
-    --eval-samples "$EVAL_SAMPLES" \
-    --max-length-filter "$MAX_LENGTH_FILTER" \
-    --tokenizer-model "$TOKENIZER_MODEL"
+    --eval-samples "$EVAL_SAMPLES"
 
 echo "✅ Online dataset ready at: $OUTPUT_DIR"

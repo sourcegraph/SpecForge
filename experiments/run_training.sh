@@ -15,6 +15,7 @@ TRAIN_DATA="/home/ronaksagtani/artifacts/spec-forge/prepared_data/train_data.jso
 EVAL_DATA="/home/ronaksagtani/artifacts/spec-forge/prepared_data/eval_data.jsonl"
 DRAFT_CONFIG="$ROOT_DIR/experiments/amp-tab-draft-config.json"
 OUTPUT_BASE="/home/ronaksagtani/artifacts/spec-forge/outputs"
+CACHE_DIR="/home/ronaksagtani/artifacts/spec-forge/cache"  # Shared cache for all runs
 
 # Training parameters
 NUM_EPOCHS=1
@@ -70,6 +71,7 @@ python "$SCRIPT_DIR/run_eagle3_training.py" \
     --eval-data "$EVAL_DATA" \
     --draft-config "$DRAFT_CONFIG" \
     --output-dir "$OUTPUT_BASE" \
+    --cache-dir "$CACHE_DIR" \
     --chat-template "$CHAT_TEMPLATE" \
     --num-epochs "$NUM_EPOCHS" \
     --batch-size "$BATCH_SIZE" \

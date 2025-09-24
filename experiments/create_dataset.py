@@ -11,7 +11,6 @@ import torch
 import sys
 from pathlib import Path
 from typing import Dict, Any, List
-from transformers import AutoTokenizer
 from tqdm import tqdm
 
 # Add experiments directory to path for logging import
@@ -20,35 +19,7 @@ from sf_logging import get_logger
 
 logger = get_logger(__name__)
 
-def get_token_counts(texts: List[str], tokenizer, batch_size: int = 64) -> List[int]:
-    """Get exact token counts using GPU batch tokenization."""
-    if not torch.cuda.is_available():
-        logger.info(f"No GPU available, using CPU tokenization...")
-        return [len(tokenizer.encode(text, add_special_tokens=False)) for text in tqdm(texts, desc="CPU tokenizing")]
-    
-    logger.info(f"GPU tokenizing {len(texts)} conversations...")
-    token_counts = []
-    
-    # Process in batches with proper padding for GPU
-    for i in tqdm(range(0, len(texts), batch_size), desc="GPU tokenizing"):
-        batch_texts = texts[i:i + batch_size]
-        
-        # Batch tokenize with padding (required for GPU tensors)
-        encoded = tokenizer(
-            batch_texts,
-            padding=True,
-            truncation=False,
-            return_tensors="pt",
-            add_special_tokens=False
-        ).to("cuda")
-        
-        # Count actual tokens (excluding padding)
-        for input_ids, attention_mask in zip(encoded["input_ids"], encoded["attention_mask"]):
-            # Count non-padding tokens
-            actual_length = attention_mask.sum().item()
-            token_counts.append(actual_length)
-            
-    return token_counts
+
 
 def extract_conversations_from_messages(example: Dict[str, Any], index: int) -> List[Dict[str, str]]:
     """Extract conversations from messages format."""
@@ -80,42 +51,11 @@ def extract_conversations_from_messages(example: Dict[str, Any], index: int) -> 
     
     return conversations
 
-def filter_by_token_length(conversations: List[Dict[str, Any]], max_length_filter: int, tokenizer) -> List[Dict[str, Any]]:
-    """Filter conversations by token length using GPU batch processing."""
-    if not max_length_filter:
-        raise ValueError("max_length_filter must be provided for filtering")
-    if not tokenizer:
-        raise ValueError("tokenizer must be provided for filtering")
-    if not conversations:
-        raise ValueError("conversations list cannot be empty")
-    
-    # Extract texts for batch tokenization
-    conversation_texts = []
-    for conv in conversations:
-        total_content = " ".join([turn["content"] for turn in conv["conversations"]])
-        conversation_texts.append(total_content)
-    
-    token_counts = get_token_counts(conversation_texts, tokenizer)
-    
-    # Filter based on token counts
-    converted = []
-    filtered_count = 0
-    
-    for conv, token_count in zip(conversations, token_counts):
-        if token_count <= max_length_filter:
-            converted.append(conv)
-        else:
-            filtered_count += 1
-    
-    if filtered_count > 0:
-        logger.info(f"Filtered out {filtered_count} conversations longer than {max_length_filter} tokens")
-        
-    return converted
 
-def convert_to_conversations(data: List[Dict[str, Any]], max_length_filter: int = None, tokenizer=None) -> List[Dict[str, Any]]:
+
+def convert_to_conversations(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Convert messages format to SpecForge conversations format."""
     
-    # First pass: Convert all messages to conversations
     all_conversations = []
     
     for i, example in enumerate(tqdm(data, desc="Processing messages")):
@@ -129,11 +69,8 @@ def convert_to_conversations(data: List[Dict[str, Any]], max_length_filter: int 
             logger.error(f"Skipping sample {i}: {e}")
             continue
     
-    # Second pass: Filter by token length if requested
-    if max_length_filter and tokenizer:
-        return filter_by_token_length(all_conversations, max_length_filter, tokenizer)
-    else:
-        return all_conversations
+    logger.info("SpecForge training will handle tokenization and sequence length efficiently")
+    return all_conversations
 
 def create_dataset(args):
     """Create dataset for SpecForge training."""
@@ -149,17 +86,6 @@ def create_dataset(args):
     logger.info(f"Samples: {args.num_samples}")
     logger.info(f"Eval samples: {args.eval_samples}")
     
-    # Load tokenizer if filtering is requested
-    tokenizer = None
-    if args.max_length_filter and args.tokenizer_model:
-        logger.info(f"Loading tokenizer from {args.tokenizer_model} for exact token counting...")
-        try:
-            tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_model)
-            logger.info("Tokenizer loaded successfully")
-        except Exception as e:
-            logger.warning(f"Failed to load tokenizer: {e}")
-            logger.warning("Skipping length filtering...")
-    
     # Load and convert data
     logger.info("Loading and converting data...")
     data = []
@@ -173,7 +99,7 @@ def create_dataset(args):
             except json.JSONDecodeError:
                 continue
     
-    converted_data = convert_to_conversations(data, args.max_length_filter, tokenizer)
+    converted_data = convert_to_conversations(data)
     logger.info(f"Converted {len(converted_data)} conversations")
     
     # Split data
@@ -323,10 +249,6 @@ Examples:
                        help="Batch size for hidden states generation (required for offline mode)")
     parser.add_argument("--mem-frac", type=float,
                        help="Memory fraction for hidden states generation (required for offline mode)")
-    parser.add_argument("--max-length-filter", type=int,
-                       help="Filter out conversations longer than this token count (optional)")
-    parser.add_argument("--tokenizer-model", type=str,
-                       help="Model path for tokenizer (used for exact token counting in filtering)")
     
     args = parser.parse_args()
     

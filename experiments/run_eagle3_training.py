@@ -106,17 +106,18 @@ def run_training(args):
     # Create timestamped output directory  
     timestamped_output_dir, latest_output_dir = create_timestamped_output_dir(args.output_dir)
     
-    # Cache goes in the same timestamped directory
-    timestamped_cache_dir = str(Path(timestamped_output_dir) / "cache")
+    # Use the provided cache directory
+    shared_cache_dir = args.cache_dir
+    Path(shared_cache_dir).mkdir(parents=True, exist_ok=True)
     
     # Update cache environment for this run
-    os.environ['TORCHINDUCTOR_CACHE_DIR'] = str(Path(timestamped_cache_dir) / "compiled_kernels")
+    os.environ['TORCHINDUCTOR_CACHE_DIR'] = str(Path(shared_cache_dir) / "compiled_kernels")
     
     logger.info(f"Target model: {args.target_model}")
     logger.info(f"Training data: {args.train_data}")
     logger.info(f"Evaluation data: {args.eval_data}")
     logger.info(f"Output directory: {timestamped_output_dir}")
-    logger.info(f"Cache directory: {timestamped_cache_dir}")
+    logger.info(f"Shared cache directory: {shared_cache_dir}")
     logger.info(f"Latest symlink: {latest_output_dir}")
     
     # Find training script
@@ -145,7 +146,7 @@ def run_training(args):
         "--learning-rate", str(args.learning_rate),
         "--max-length", str(args.max_length),
         "--chat-template", args.chat_template,
-        "--cache-dir", timestamped_cache_dir,
+        "--cache-dir", shared_cache_dir,
         "--embedding-key", args.embedding_key,
         "--attention-backend", args.attention_backend,
         "--ttt-length", str(args.ttt_length),
@@ -186,8 +187,8 @@ def main():
                        help="Draft model config JSON file")
     parser.add_argument("--output-dir", type=str, required=True,
                        help="Output directory for trained model")
-    parser.add_argument("--cache-dir", type=str, required=False,
-                       help="Base cache directory (will be timestamped automatically)")
+    parser.add_argument("--cache-dir", type=str, required=True,
+                       help="Shared cache directory for dataset and kernel caching")
     parser.add_argument("--chat-template", type=str, required=True,
                        help="Chat template name")
     
