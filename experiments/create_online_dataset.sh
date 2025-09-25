@@ -6,7 +6,7 @@ set -e
 # Configuration  
 BASE_DATASET="/home/ronaksagtani/artifacts/spec-forge/dataset/data.jsonl"
 NUM_SAMPLES=${1:-None}   # None means use all samples
-EVAL_SAMPLES=${2:-1000}   # Default 1000 eval samples
+EVAL_SAMPLES=${2:-10000}   # Default 1000 eval samples
 OUTPUT_DIR="/home/ronaksagtani/artifacts/spec-forge/prepared_data"
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )

@@ -156,7 +156,8 @@ def run_training(args):
         "--eval-interval", str(args.eval_interval),
         "--report-to", args.report_to,
         "--wandb-project", args.wandb_project,
-        "--wandb-name", f"{args.wandb_name}-{datetime.now().strftime('%Y%m%d_%H%M%S')}"  # Add timestamp to wandb name
+        "--wandb-name", f"{args.wandb_name}-{datetime.now().strftime('%Y%m%d_%H%M%S')}",  # Add timestamp to wandb name
+        "--dist-timeout", "60"  # 60 minutes timeout for large dataset processing
     ]
     
     # Add step-based parameters if provided
