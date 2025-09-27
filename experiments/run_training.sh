@@ -19,7 +19,7 @@ CACHE_DIR="/home/ronaksagtani/artifacts/spec-forge/cache"  # Shared cache for al
 
 # Training parameters
 NUM_EPOCHS=1
-BATCH_SIZE=1
+BATCH_SIZE=4
 DRAFT_GLOBAL_BATCH_SIZE=32   # Reasonable global batch size for gradient updates
 LEARNING_RATE=1e-4
 MAX_LENGTH=8192
@@ -29,8 +29,7 @@ TTT_LENGTH=7
 LOG_STEPS=1
 SAVE_INTERVAL=1   # Save after each epoch (if step-based not used)
 EVAL_INTERVAL=1   # Eval after each epoch (if step-based not used)
-EVAL_STEPS=500    # Run evaluation every 500 steps
-SAVE_STEPS=1000   # Save checkpoint every 1000 steps
+SAVE_STEPS=500   # Save checkpoint every 500 steps
 REPORT_TO="wandb"
 WANDB_PROJECT="spec-forge-training"
 WANDB_NAME="amp-tab-eagle3-poc"
@@ -89,7 +88,6 @@ python "$SCRIPT_DIR/run_eagle3_training.py" \
     --report-to "$REPORT_TO" \
     --wandb-project "$WANDB_PROJECT" \
     --wandb-name "$WANDB_NAME" \
-    --eval-steps "$EVAL_STEPS" \
     --save-steps "$SAVE_STEPS" \
     $([ -n "$NUM_GPUS" ] && echo "--num-gpus $NUM_GPUS")
 

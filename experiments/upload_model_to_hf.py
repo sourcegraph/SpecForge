@@ -81,8 +81,8 @@ def upload_model_to_huggingface(
 
 # Example usage
 if __name__ == "__main__":
-    LOCAL_MODEL_PATH = "/home/ronaksagtani/artifacts/spec-forge/outputs/eagle3-40k-acc-0p8-20250924_212817/epoch_0"
-    REPO_NAME = "sourcegraph/eagle3-speculator-50k-amp-tab-draft-model"
+    LOCAL_MODEL_PATH = "/home/ronaksagtani/artifacts/spec-forge/outputs/latest/epoch_0"
+    REPO_NAME = "sourcegraph/eagle3-speculator-300k-amp-tab-draft-model-acc-0p95"
 
     upload_model_to_huggingface(
         local_model_path=LOCAL_MODEL_PATH,
